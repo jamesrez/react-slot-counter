@@ -21,7 +21,6 @@ import {
   mergeClassNames,
   random,
   range,
-  shuffle,
 } from './utils';
 
 interface AnimateOnVisibleOptions {
