@@ -17,6 +17,7 @@ import { Direction, SlotCounterRef, StartAnimationOptions, Value } from './types
 import {
   debounce,
   generateCyclicRange,
+  isJSXElement,
   isJSXElementArray,
   mergeClassNames,
   random,
@@ -230,13 +231,29 @@ function SlotCounter(
 
   const isChangedValueLength = prevValueRefList.length !== valueRefList.length;
   const isChangedValueIndexList: number[] = [];
-  valueRefList.forEach((_, i) => {
+  valueRefList.forEach((char, i) => {
     const targetIndex = valueRefList.length - i - 1;
     const prev = displayStartValue ? startValueRefList : prevValueRefList;
+    const prevChar = prev[targetIndex];
+    const currentChar = valueRefList[targetIndex];
 
+    const prevCharStr = ((): string => {
+      if (typeof prevChar === 'string' || typeof prevChar === 'number') return prevChar.toString();
+      return '';
+    })();
+
+    const currentCharStr = ((): string => {
+      if (typeof currentChar === 'string' || typeof currentChar === 'number') return currentChar.toString();
+      return '';
+    })();
+
+    // Only consider a position changed if:
+    // 1. The length changed, or
+    // 2. The character is different AND both characters are numeric, or
+    // 3. animateUnchanged is true (force animation)
     if (
-      valueRefList[targetIndex] !== prev[targetIndex] ||
       isChangedValueLength ||
+      (currentCharStr !== prevCharStr && /\d/.test(currentCharStr) && /\d/.test(prevCharStr)) ||
       animateUnchanged
     ) {
       isChangedValueIndexList.push(targetIndex);
@@ -484,10 +501,23 @@ function SlotCounter(
         const disableStartValue =
           startValue != null && (startValueOnce ? animationCountRef.current > 1 : false);
 
+        // Only animate if the character is numeric
+        const currentChar = ((): string => {
+          if (typeof v === 'string' || typeof v === 'number') return v.toString();
+          return '';
+        })();
+        const shouldAnimate = /\d/.test(currentChar);
+
         // Determine animation direction based on character comparison
-        const prevChar = prevValue?.toString()[i] || '0';
-        const currentChar = value?.toString()[i] || '0';
-        const isDecrease = /\d/.test(prevChar) && /\d/.test(currentChar) &&
+        const prevChar = ((): string => {
+          if (!prevValue) return '0';
+          if (typeof prevValue === 'string' || typeof prevValue === 'number') {
+            const str = prevValue.toString();
+            return i < str.length ? str[i] : '0';
+          }
+          return '0';
+        })();
+        const isDecrease = shouldAnimate && /\d/.test(prevChar) &&
           parseInt(prevChar, 10) > parseInt(currentChar, 10);
 
         let reverseAnimation = isDecrease;
@@ -502,8 +532,8 @@ function SlotCounter(
             isNew={diffValueListCount > 0 && i < diffValueListCount}
             maxNumberWidth={maxNumberWidth}
             numbersRef={numbersRef}
-            active={active}
-            isChanged={isChanged}
+            active={active && shouldAnimate}
+            isChanged={isChanged && shouldAnimate}
             charClassName={charClassName}
             effectiveDuration={effectiveDuration}
             delay={delay}
@@ -511,11 +541,11 @@ function SlotCounter(
             startValue={!disableStartValue ? startValueList?.[i + startValueLengthDiff] : undefined}
             disableStartValue={disableStartValue}
             dummyList={
-              sequentialAnimationMode && (!autoAnimationStart || animationExecuteCountRef.current > 1)
+              shouldAnimate && sequentialAnimationMode && (!autoAnimationStart || animationExecuteCountRef.current > 1)
                 ? getSequentialDummyList(i)
                 : dummyList
             }
-            hasSequentialDummyList={sequentialAnimationMode && (!autoAnimationStart || animationExecuteCountRef.current > 1)}
+            hasSequentialDummyList={shouldAnimate && sequentialAnimationMode && (!autoAnimationStart || animationExecuteCountRef.current > 1)}
             hasInfiniteList={hasInfiniteList}
             valueClassName={valueClassName}
             numberSlotClassName={numberSlotClassName}
