@@ -1,9 +1,3 @@
-import {
-  NARROW_NO_BREAK_SPACE_UNICODE_REGEXP,
-  NBSP_UNICODE_REGEXP,
-  SEPARATOR_CHARACTERS,
-  SPACE_UNICODE_REGEXP,
-} from 'constants';
 import { Value } from './types/common';
 
 export const mergeClassNames = (...args: (string | null | undefined)[]) =>
@@ -42,16 +36,6 @@ export const shuffle = (arr: (number | string | JSX.Element)[]) => {
   return result;
 };
 
-export const toNumeric = (value: string | string[] | number) => {
-  if (typeof value === 'number') return value;
-
-  const str = Array.isArray(value) ? value.join('') : value;
-  return str.replace(/[,.]/g, '');
-};
-
-export const isNumeric = (value: Value): value is string | string[] | number =>
-  typeof value !== 'object' && !Number.isNaN(toNumeric(value));
-
 export const isJSXElement = (value: string | number | JSX.Element): value is JSX.Element =>
   typeof value === 'object';
 
@@ -71,10 +55,3 @@ export const debounce = <T extends (...args: any[]) => any>(
     }, delay);
   };
 };
-
-export const isSeparatorCharacter = (value: string | JSX.Element) =>
-  !isJSXElement(value) &&
-  (SEPARATOR_CHARACTERS.includes(value) ||
-    SPACE_UNICODE_REGEXP.test(value) ||
-    NBSP_UNICODE_REGEXP.test(value) ||
-    NARROW_NO_BREAK_SPACE_UNICODE_REGEXP.test(value));

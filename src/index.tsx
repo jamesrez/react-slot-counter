@@ -18,12 +18,10 @@ import {
   debounce,
   generateCyclicRange,
   isJSXElementArray,
-  isNumeric,
-  isSeparatorCharacter as defaultIsSeparatorCharacter,
   mergeClassNames,
   random,
   range,
-  toNumeric,
+  shuffle,
 } from './utils';
 
 interface AnimateOnVisibleOptions {
@@ -45,7 +43,6 @@ interface Props {
   hasInfiniteList?: boolean;
   containerClassName?: string;
   charClassName?: string;
-  separatorClassName?: string;
   valueClassName?: string;
   numberSlotClassName?: string;
   numberClassName?: string;
@@ -57,8 +54,6 @@ interface Props {
   startFromLastDigit?: boolean;
   onAnimationStart?: () => void;
   onAnimationEnd?: () => void;
-  separatorCharacters?: string[];
-  isSeparatorCharacter?: ((value: string | JSX.Element) => boolean) | null;
 }
 
 function SlotCounter(
@@ -74,7 +69,6 @@ function SlotCounter(
     autoAnimationStart: _autoAnimationStart = true,
     containerClassName,
     charClassName,
-    separatorClassName,
     valueClassName,
     numberSlotClassName,
     numberClassName,
@@ -88,8 +82,6 @@ function SlotCounter(
     startFromLastDigit = false,
     onAnimationStart,
     onAnimationEnd,
-    separatorCharacters,
-    isSeparatorCharacter = defaultIsSeparatorCharacter,
   }: Props,
   ref: React.Ref<SlotCounterRef>,
 ) {
@@ -99,8 +91,8 @@ function SlotCounter(
       isJSXElementArray(value)
         ? ''
         : typeof value === 'object'
-        ? JSON.stringify(value)
-        : value.toString(),
+          ? JSON.stringify(value)
+          : value.toString(),
     [value],
   );
   const [active, setActive] = useState(false);
@@ -317,44 +309,33 @@ function SlotCounter(
   const getSequentialDummyList = useCallback(
     (index: number) => {
       const prevValue = displayStartValue ? startValue : prevValueRef.current;
-      if (prevValue == null || !isNumeric(prevValue) || !isNumeric(value)) {
+      if (prevValue == null) return [];
+
+      const prevValueStr = prevValue.toString();
+      const valueStr = value.toString();
+
+      // Get the characters at the current position
+      const prevChar = prevValueStr[index] || '0';
+      const currentChar = valueStr[index] || '0';
+
+      // If characters are the same or not numeric, no animation needed
+      if (prevChar === currentChar || !/\d/.test(prevChar) || !/\d/.test(currentChar)) {
         return [];
       }
 
-      const prevValueLength = prevValue.toString().length;
-      const valueLength = value.toString().length;
-
-      // check if value digit is increasing
-      const isDigitIncreasing = prevValueLength < valueLength;
-
-      // diff between prevValue and value length
-      const diff = Math.abs(prevValueLength - valueLength);
-
-      // prevValue to number without separator
-      const prevNumValue = Number(toNumeric(prevValue.toString()));
-
-      // value to number without separator
-      const numValue = Number(toNumeric(value.toString()));
-      const prevDigit = Number(
-        prevNumValue.toString()[isDigitIncreasing ? -diff + index : diff + index] || 0,
-      );
-      const currentDigit = Number(numValue.toString()[index] || 0);
-
-      if (currentDigit === prevDigit) return [];
-
-      const isIncreasing = prevNumValue < numValue;
+      // For numeric characters, create a sequence
+      const prevDigit = parseInt(prevChar, 10);
+      const currentDigit = parseInt(currentChar, 10);
+      const isIncreasing = prevDigit < currentDigit;
 
       const dummyList = isIncreasing
         ? generateCyclicRange((prevDigit + 1) % 10, currentDigit)
         : generateCyclicRange((currentDigit + 1) % 10, prevDigit);
 
       const effectiveDirection = startAnimationOptionsRef.current?.direction ?? direction;
-
-      // reverse dummy list if direction is bottom-up and value is decreasing
       if (effectiveDirection === 'bottom-up' && !isIncreasing) {
         return dummyList.reverse();
       }
-
       return dummyList;
     },
     [displayStartValue, value, startValue, direction],
@@ -490,32 +471,6 @@ function SlotCounter(
     startAnimationAll,
   ]);
 
-  /**
-   * Check if the value is a separator character
-   * @param value - The value to check
-   * @returns true if the value is a separator character, false otherwise
-   */
-  const checkSeparator = (value: string | JSX.Element) => {
-    // If separatorCharacters is provided, check if the value is in the separatorCharacters array
-    if (separatorCharacters && typeof value === 'string') {
-      return separatorCharacters.includes(value);
-    }
-
-    // If isSeparatorCharacter is null, return false (no separator)
-    if (isSeparatorCharacter === null) {
-      return false;
-    }
-
-    // If isSeparatorCharacter is provided or defaultIsSeparatorCharacter, use that to check if the value is a separator character
-    return isSeparatorCharacter(value);
-  };
-
-  const isChangedValueIndexListWithoutSeparator = isChangedValueIndexList.filter(
-    (i) => !checkSeparator(renderValueList[i]),
-  );
-
-  let noSeparatorValueIndex = -1;
-
   return (
     <span
       key={key}
@@ -525,40 +480,21 @@ function SlotCounter(
       {renderValueList.map((v, i) => {
         const isChanged = isChangedValueIndexList.includes(i);
         const delay =
-          (isChanged ? isChangedValueIndexListWithoutSeparator.indexOf(i) : 0) * calculatedInterval;
+          (isChanged ? isChangedValueIndexList.indexOf(i) : 0) * calculatedInterval;
         const prevValue = prevValueRef.current;
         const disableStartValue =
           startValue != null && (startValueOnce ? animationCountRef.current > 1 : false);
-        const isDecrease =
-          value != null &&
-          prevValue != null &&
-          isNumeric(value) &&
-          isNumeric(prevValue) &&
-          toNumeric(value) < toNumeric(prevValue);
+
+        // Determine animation direction based on character comparison
+        const prevChar = prevValue?.toString()[i] || '0';
+        const currentChar = value?.toString()[i] || '0';
+        const isDecrease = /\d/.test(prevChar) && /\d/.test(currentChar) &&
+          parseInt(prevChar, 10) > parseInt(currentChar, 10);
 
         let reverseAnimation = isDecrease;
         if (startAnimationOptionsRef.current?.direction)
           reverseAnimation = startAnimationOptionsRef.current?.direction === 'top-down';
         if (direction) reverseAnimation = direction === 'top-down';
-
-        // Separator check
-        const isSeparator = checkSeparator(v);
-
-        // Separator rendering
-        if (isSeparator) {
-          return (
-            <span
-              key={valueRefList.length - i - 1}
-              className={mergeClassNames(styles.separator, separatorClassName)}
-            >
-              {v}
-            </span>
-          );
-        }
-
-        const hasSequentialDummyList =
-          sequentialAnimationMode && (!autoAnimationStart || animationExecuteCountRef.current > 1);
-        noSeparatorValueIndex += 1;
 
         return (
           <Slot
@@ -576,9 +512,11 @@ function SlotCounter(
             startValue={!disableStartValue ? startValueList?.[i + startValueLengthDiff] : undefined}
             disableStartValue={disableStartValue}
             dummyList={
-              hasSequentialDummyList ? getSequentialDummyList(noSeparatorValueIndex) : dummyList
+              sequentialAnimationMode && (!autoAnimationStart || animationExecuteCountRef.current > 1)
+                ? getSequentialDummyList(i)
+                : dummyList
             }
-            hasSequentialDummyList={hasSequentialDummyList}
+            hasSequentialDummyList={sequentialAnimationMode && (!autoAnimationStart || animationExecuteCountRef.current > 1)}
             hasInfiniteList={hasInfiniteList}
             valueClassName={valueClassName}
             numberSlotClassName={numberSlotClassName}

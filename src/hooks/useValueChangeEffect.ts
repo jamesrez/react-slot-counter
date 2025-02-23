@@ -5,8 +5,8 @@ function useValueChangeEffect(dependencies: any[]) {
   const dependenciesRef = useRef(dependencies);
   const prevDependencies = useRef<typeof dependencies>(dependenciesRef.current);
 
-  const serialized = dependencies.join(',');
-  const serializedDependencies = dependenciesRef.current?.join(',');
+  const serialized = dependencies.map(String).join(',');
+  const serializedDependencies = dependenciesRef.current?.map(String).join(',');
 
   useEffect(() => {
     if (serializedDependencies === serialized) return;
